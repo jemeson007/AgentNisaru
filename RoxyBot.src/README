@@ -1,0 +1,58 @@
+RoxyBot
+Copyright (c) 2007 Brown University
+
+1. How to run RoxyBot
+To run Roxybot, you need the followings :
+	1) Java version 1.5 or higher
+	2) perl (for simulation), 
+	   make (for compilation and running RoxyBot on the real server)
+	3) cplex
+	4) wget, gzip, rm, mv (used in EventAnalyzer, which is used in the real agent (for an online server).)
+
+	We did not implement any good way to bid entertainment tickets for MV-based algorithms. Thus, we recommend to run SAA-based algorithms, or to run MV-based algorithms on an online server with no-entertainment option (app/server.noent.tar is a variant TAC server that does not contain any entertainment tickets. Also, all the simulation options does not contain entertainment tickets.)
+
+	If your computer does not support 2) nor 4), you can see the code and modify it by yourself. It won't be too hard.
+
+To run Roxybot on an online server, you should do the following:
+	1) Set CPLEXBINDIR, CPLEXLIB, JDK in 'Makefile' file.
+	2) Change 'agent' file. 
+	   The settings are described in 'config/agent/default;.
+	3) Change 'agent.conf' file.
+	   The settings are the basic TACAgent's agent.conf setting.
+	4) On the console, type "make all; make runagent".
+
+To run Roxybot on a simulation server, you should do the following:
+	1) Set CPLEXBINDIR, CPLEXLIB, JDK in 'simulate.pl' file.
+	2) Create simulation specification file. 
+	   The settings are described in 'config/simset/default'.
+	   You can also add/modify agent setting files in 'config/simset/'.
+	3) On the console, type "chmod +x simulate.pl".
+	4) On the console, type "make all; simulate.pl <filename>".
+
+
+2. References (among agent / simulation specification options)
+% ce_update = Walverine
+This is our rough implementation of Walverine's tatonnement method. For more information, google the paper "Walverine: A Walrasian Trading Agent".
+
+% flight_bidding = attac
+This is our rough implementation of ATTAC's flight bidding algorithm. For more information, google the paper "ATTac-2001: A Learning, Autonomous Bidding Agent". Our implementation is designed for non-entertainment ticket games in our simulator. In online, time-scheduling problem might happen, so we do not recommend using our implementation.
+
+
+3. Structure
+Roxybot is composed of three big parts: 
+	1) bidding algorithms : edu.brown.cs.algorithm, edu.brown.cs.bidder,
+	2) predictions : edu.brown.cs.modeler, and
+	3) simulator : edu.brown.cs.simulator.
+
+
+4. 'app' directory
+'analyze.pl' is a good program to parse simulation statistics. Type 'analyze.pl' on the console and you will get the instructions. To use this program, you need to save the output of simulation as .out file (e.g. simulate.pl config/simset/default > default.out; analyze.pl -f ../default.out;).
+
+'server.noent.tar' is a variant TAC server that does not contains any entertainment tickets. This is built by Victor Naroditskiy (vnarodit@cs.brown.edu).
+
+5. 'config' directory
+	agent : agent specification file examples
+	simset : simulation specification file examples
+	agent.conf : agent.conf file sample
+	ignorelist.txt : if the output string starts from any word in the list, it will not be printed.
+	log.format.txt : simulation output file format.

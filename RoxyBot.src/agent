@@ -1,0 +1,7 @@
+% agent setting
+% ALGORITHM SPECIFICATION
+algorithm = SAA
+algorithm_saa_type = top
+
+flight_prediction = sampled
+

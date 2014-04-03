@@ -1,0 +1,564 @@
+/**
+ * <legal>
+ * Copyright (c) 2005 Brown University.
+ *
+ * This file is part of Roxybot.
+ *
+ * Roxybot is free software; you can redistribute it and/or modify it under
+ * the terms of the GNU Lesser General Public License as published by the Free
+ * Software Foundation; either version 2.1 of the License, or (at your option)
+ * any later version.
+ *
+ * Roxybot is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License
+ * for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License along
+ * with Foobar; if not, write to the Free Software Foundation, Inc.,
+ * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA
+ * </legal>
+ *
+ * SAACompleterSequential
+ *
+ * Author  : Seong Jae Lee
+ * Created : 5 May, 2007
+ */
+
+package edu.brown.cs.completer;
+
+import props.Misc;
+import ilog.concert.IloIntVar;
+import ilog.concert.IloLinearNumExpr;
+import ilog.cplex.IloCplex;
+import edu.brown.cs.modeler.FlightPredictor;
+import edu.brown.cs.tac.Constants;
+import edu.brown.cs.tacds.Allocation;
+import edu.brown.cs.tacds.Completion;
+import edu.brown.cs.tacds.Repository;
+import edu.brown.cs.tacds.Priceline;
+import edu.brown.cs.tacds.BidPolicy;
+import edu.brown.cs.tacds.TravelPackage;
+
+public class SAACompleterSequential extends Completer {
+	protected static final TravelPackage[] m_packages = Constants.makePackages();
+	public Repository m_repository;
+	
+	// hotel : stochastic, flight & entertainment : deterministic
+	protected int numAuction = 28;
+	protected int numClient = 8;
+	protected int numScenario = 50;
+	protected int numPackage = m_packages.length;
+	
+	public void setNumScenario (int s) { numScenario = s; }
+	public void setClosingHotel (int a) { constHotelClosing = a; }
+	
+	private float[] 	constCurrBuy, constCurrSell;
+	private float[] 	constNextBuy, constNextSell;
+	private float[] 	constProb;
+	private float[][]	constHotel;
+	private int[][]		constHotelOrdered;
+	private boolean[]	constHotelClosed;
+	private int			constHotelClosing;
+	private float[][]	constUtility;
+	private int[] 		constOwn, constHQW;
+	private boolean[][] constPackageContainGood;
+	private float 		constAccount;
+	
+	private IloIntVar [] 		varCurrBuy, varCurrSell;
+	private IloIntVar [][] 	varNextBuy, varNextSell;
+	private IloIntVar [][][][]	varHotelForQth; // auction, qth, price, scenario
+	private IloIntVar [][][] 	varClientPackageInScenario;
+	
+	IloLinearNumExpr objective;
+	
+	public SAACompleterSequential(Repository r) {
+		super();
+		m_repository = r;
+	}
+	
+	public Completion run () { try {
+		if (m_repository.getGameSec() % 60 > 50) {
+			Misc.warn("SAACompleter.run : too little time left");
+			return null;
+		}
+		
+		m_cplex.clearModel();
+		m_cplex.setParam(IloCplex.IntParam.ClockType, 2);
+		m_cplex.setParam(IloCplex.DoubleParam.TiLim, 55 - m_repository.getGameSec() % 60);
+		m_cplex.setOut(null);
+		
+		return super.run();
+	} catch (Exception e) { e.printStackTrace(); return null; }
+	}
+	
+	protected int[] sort (float[] toSort, boolean doFloor) {
+		for (int i = 0; i < toSort.length; i++) {
+			float min = Constants.INFINITY;
+			int minIndex = i;
+			
+			for (int j = i; j < toSort.length; j++) {
+				if (min > toSort[j]) {
+					min = toSort[j];
+					minIndex = j;
+				}
+			}
+			
+			int tmp = 0;
+			tmp = (int) toSort[i];
+			toSort[i] = min;
+			toSort[minIndex] = tmp;
+		}
+		
+		// TODO online-specific
+		for (int i = 0; i < toSort.length; i++) {
+			toSort[i] = (int) (doFloor ? Math.floor(toSort[i] - 0.01f) : Math.ceil(toSort[i] + 0.01f));
+		}
+		
+		int size = toSort.length;
+		for (int i = 0; i < toSort.length - 1; i++) {
+			if ((int) toSort[i] == (int) toSort[i+1]) size--;
+		}
+		
+		int[] ret = new int[size];
+		int counter = 1;
+		ret[0] = (int) toSort[0];
+		for (int i = 1; i < toSort.length; i++) {
+			if ((int) toSort[i-1] == (int) toSort[i]) continue;
+			ret[counter] = (int) toSort[i];
+			counter++;
+		}
+		Misc.myassert(counter == size);
+		
+		return ret;
+	}
+	
+	protected void setConstants () {
+		constPackageContainGood = new boolean[numPackage][numAuction];
+		constOwn 	 	= new int[numAuction];
+		constCurrBuy	= new float[numAuction];
+		constCurrSell 	= new float[numAuction];
+		constNextBuy	= new float[numAuction];
+		constNextSell	= new float[numAuction];
+		constHotel		= new float[numAuction][numScenario];
+		constHotelOrdered		= new int[8][];
+		constHotelClosed 		= new boolean[8];
+		constHQW		= new int[8];
+		constUtility		= new float[numClient][numPackage];
+		constProb		= new float[numScenario];
+		
+		constAccount = (float) m_repository.account;
+		
+		for (int p = 0; p < numPackage; p++) {
+			for (int a = 0; a < numAuction; a++) {
+				constPackageContainGood[p][a] = m_packages[p].containsGood(a);
+			}
+		}
+		
+		for (int c = 0; c < numClient; c++) {
+			for (int p = 0; p < numPackage; p++) {
+				constUtility[c][p] = m_packages[p].calculateUtility(m_repository.getClientPrefs()[c], true, true, true);
+			}
+		}
+		
+		// we'll set flight/event prices using tmpPriceline
+		Priceline tmpPriceline = m_repository.updateFlightAndEvent(new Priceline(),
+				FlightPredictor.WITHIN_1MIN, FlightPredictor.AFTER_1MIN);
+		Priceline[] hotels = m_repository.removeXMostRecent(numScenario);
+
+		for (int s = 0; s < numScenario; s++) constProb[s] = (float) hotels[s].probability;
+		
+		for (int a = 0; a < numAuction; a++) {
+			constOwn[a] = m_repository.getOwn(a);
+			
+			switch (Constants.auctionType(a)) {
+			case Constants.TYPE_FLIGHT:
+				constCurrBuy[a] = tmpPriceline.currBuyPrice[a];
+				constNextBuy[a] = tmpPriceline.nextBuyPrice[a];
+   				break;
+				
+			case Constants.TYPE_HOTEL:
+				if (m_repository.isAuctionClosed(a)) {
+					constHotelClosed[a-8] = true;
+					break;
+				}
+				
+				constHQW[a-8] = m_repository.getQuote(a).getHQW();
+				constHotelClosed[a-8] = false;
+				
+				float[] tmp = new float[numScenario];
+				float price = m_repository.getQuote(a).getAskPrice();
+				
+				for (int s = 0; s < numScenario; s++) {
+					constHotel[a-8][s] = hotels[s].currBuyPrice[a];
+					tmp[s] = hotels[s].currBuyPrice[a];
+					Misc.myassert(tmp[s] > price - 0.01f);
+					
+					// TODO this is only true for online game.
+					tmp[s] = Math.max(tmp[s], price + 1.01f); // must offer at least q units at ASK+1 or greater.
+					Misc.myassert(Math.ceil(tmp[s]) > price + 0.99f);
+				}
+				
+				constHotelOrdered[a-8] = sort(tmp, false);
+				
+				Misc.myassert(constHotelOrdered[a-8][0] > price + 0.99f);
+				
+				break;
+				
+			case Constants.TYPE_EVENT:
+				constCurrBuy[a] = tmpPriceline.currBuyPrice[a];
+				constCurrSell[a] = tmpPriceline.currSellPrice[a];
+				constNextBuy[a] = tmpPriceline.nextBuyPrice[a];
+				constNextSell[a] = tmpPriceline.nextSellPrice[a];
+				
+				if (constCurrBuy [a] == constCurrSell[a]) {
+					constCurrSell[a]--;
+					constCurrBuy[a]++;
+				}
+				
+				if (constNextBuy[a] == constNextSell[a]) {
+					constNextSell[a]++;
+					constNextBuy[a]--;
+	   			}
+				
+				// if we accidentally sold more than we have, 
+				// we rebuy the entertainment ticket at any cost.
+				if (constOwn[a] < 0) {
+					constCurrSell[a] = 0;
+					constNextSell[a] = 0;
+					constNextBuy[a] = 200;
+				}
+				
+				break;
+			}
+		}
+		
+		String toPrint = getClass().getSimpleName() + ".setConstants : own ";
+		for (int a = 0; a < numAuction; a++) toPrint += constOwn[a] + " ";
+		Misc.println(toPrint);
+
+		toPrint = getClass().getSimpleName() + ".setConstants : hqw ";
+		for (int a = 0; a < 8; a++) toPrint += constHQW[a] + " ";
+		Misc.println(toPrint);
+		
+		toPrint = getClass().getSimpleName() + ".setConstants : currBuy ";
+		for (int a = 0; a < 8; a++) toPrint += ((int) constCurrBuy[a]==Constants.INFINITY) ? "xxx " : (int) constCurrBuy[a] + " ";
+		for (int a = 8; a < 16; a++) toPrint += ((int) constHotel[a-8][0]==Constants.INFINITY) ? "xxx " : (int) constHotel[a-8][0] + " ";
+		for (int a = 16; a < numAuction; a++) toPrint += ((int) constCurrBuy[a]==Constants.INFINITY) ? "xxx " : (int) constCurrBuy[a] + " ";
+		Misc.println(toPrint);
+	}
+	
+	protected void setDecisionVariables () { try {
+		varCurrBuy = new IloIntVar[numAuction];
+		varNextBuy = new IloIntVar[numAuction][numScenario];
+		varCurrSell	= new IloIntVar[numAuction];
+		varNextSell	= new IloIntVar[numAuction][numScenario];
+		varHotelForQth	 = new IloIntVar[8][Constants.MAX_QUANTITY][numScenario][];
+		varClientPackageInScenario = new IloIntVar[numClient][numPackage][numScenario];
+		
+		for (int a = 0; a < numAuction; a++) {
+			switch(Constants.auctionType(a)) {
+			case Constants.TYPE_FLIGHT:
+				varCurrBuy[a] = m_cplex.intVar(0, 8-constOwn[a], "curBuyFlight_" + a);
+				for (int s = 0; s < numScenario; s++)
+					varNextBuy[a][s] = m_cplex.intVar(0, 8-constOwn[a], "nextBuyFlight_a_" + a + "_s_" + s);
+				
+				break;
+				
+			case Constants.TYPE_HOTEL:
+				if (constHotelClosed[a-8]) break;
+				
+				int s_max = ( a == constHotelClosing ) ? 1 : numScenario;
+				
+				for (int q = 0; q < Constants.MAX_QUANTITY; q++) {
+					for (int s = 0; s < s_max; s++) {
+						varHotelForQth[a-8][q][s] = new IloIntVar[constHotelOrdered[a-8].length];
+						for (int i = 0; i < constHotelOrdered[a-8].length; i++) {
+							varHotelForQth[a-8][q][s][i] = m_cplex.boolVar("hotelForQthGood_a_" + a + "_q_" + q + "_i_" + i);
+						}
+					}
+				}
+				
+				break;
+				
+			case Constants.TYPE_EVENT:
+				// TODO how can we assume the total number of event tickets that can be purchased now? Shouldn't it be just 1?
+				varCurrBuy[a] = m_cplex.intVar(0, 1); //Constants.MAX_QUANTITY - ownGoodConstant[a], "currBuyEvent_" + a);
+				varCurrSell[a] = m_cplex.intVar(0, Math.max(0, Math.min(constOwn[a], 1))); //ownGoodConstant[a], "currSellEvent_" + a);
+				
+				for (int s = 0; s < numScenario; s++) {
+					varNextBuy[a][s] = m_cplex.intVar(0, Constants.MAX_QUANTITY - constOwn[a], "nextBuyEvent_" + a);
+					varNextSell[a][s] = m_cplex.intVar(0, Math.max(0, constOwn[a]), "nextSellEvent_" + a);
+				}
+				
+				break;
+			}
+		}
+		
+		for (int c = 0; c < numClient; c++) {
+			for (int p = 0; p < numPackage; p++) {
+				for (int s = 0; s < numScenario; s++) {
+					varClientPackageInScenario[c][p][s] = 
+						m_cplex.boolVar("clientGetsPack_c_" + c + "_p_" + p + "_s_" + s);
+				}
+			}
+		}
+	} catch (Exception e) { e.printStackTrace(); }}
+	
+	protected void setObjectiveFunction () { try {
+		objective = m_cplex.linearNumExpr();
+		
+		// this is just for checking how much this algorithm expect to earn. 
+		// adding a constant value to objective function doesn't harm. - sjlee
+		float totalProb = 0;
+		for (int s = 0; s < numScenario; s++) totalProb += constProb[s];
+		objective.setConstant(constAccount * totalProb);
+		
+		for (int s = 0; s < numScenario; s++) {
+			IloLinearNumExpr value = m_cplex.linearNumExpr();
+			double prob = constProb[s];
+			
+			// utility
+			for (int c = 0; c < numClient; c++) for (int p = 0; p < numPackage; p++) {
+				value.addTerm(varClientPackageInScenario[c][p][s], prob * constUtility[c][p]);
+			}
+			
+			// cost and revenue
+			for (int a = 0; a < numAuction; a++) {
+				switch (Constants.auctionType(a)) {
+				case Constants.TYPE_FLIGHT:
+					value.addTerm(varCurrBuy[a], prob * -1.0 * constCurrBuy[a]);
+					value.addTerm(varNextBuy[a][s], prob * -1.0 * constNextBuy[a]);
+					break;
+					
+				case Constants.TYPE_HOTEL:
+					if (constHotelClosed[a-8]) break;
+					
+					int temp_s = (constHotelClosing == a) ? 0 : s;
+					for (int q = 0; q < Constants.MAX_QUANTITY; q++) {
+						for (int i = 0; i < varHotelForQth[a-8][q][temp_s].length; i++) {
+							Misc.myassert(varHotelForQth[a-8][q][temp_s].length == constHotelOrdered[a-8].length);
+							float simPrice = constHotel[a-8][s];
+							float bidPrice = constHotelOrdered[a-8][i];
+							
+							// to prevent this we discourage submitting bids for no reason
+							value.addTerm(varHotelForQth[a-8][q][temp_s][i], prob * -1.0);
+							
+							if (simPrice <= bidPrice) {
+								value.addTerm(varHotelForQth[a-8][q][temp_s][i], prob * -1.0 * simPrice);
+							}
+						}
+					}
+					
+					break;
+					
+				case Constants.TYPE_EVENT:
+					value.addTerm(varCurrBuy [a], prob * -1.0 * constCurrBuy[a] );
+					value.addTerm(varCurrSell[a], prob *  1.0 * constCurrSell[a]);
+					value.addTerm(varNextBuy [a][s], prob * -1.0 * constNextBuy[a]);						
+					value.addTerm(varNextSell[a][s], prob *  1.0 * constNextSell[a]);
+					break;
+				} // end of switch
+			} // end of for all auction
+			
+			objective.add(value);
+		} // end of for all scenario
+		
+		// add maximize objective to model
+		m_cplex.addMaximize(objective);
+	} catch (Exception e) { e.printStackTrace(); }}
+	
+	protected void setConstraints () { try {
+		// clientPackageInScenario
+		for (int c = 0; c < numClient; c++) {
+			for (int s = 0; s < numScenario; s++) {
+				IloLinearNumExpr constraint = m_cplex.linearNumExpr();
+				for (int p = 0; p < numPackage; p++) {
+					constraint.addTerm(varClientPackageInScenario[c][p][s], 1.0);
+				}
+				m_cplex.addEq(constraint, 1.0, "client1pkg_c_" + c + "_s_" + s);
+			}
+		}
+		
+		// hotelForQthGood	
+		for (int a = 0; a < 8; a++) {
+			if (constHotelClosed[a]) continue;
+			for (int q = 0; q < Constants.MAX_QUANTITY; q++) {
+				int s_max = (constHotelClosing == a+8) ? 1 : numScenario;
+				for (int s = 0; s < s_max; s++) {
+					IloLinearNumExpr constraint = m_cplex.linearNumExpr();
+					for (int i = 0; i < varHotelForQth[a][q][s].length; i++) {
+						constraint.addTerm(varHotelForQth[a][q][s][i], 1.0);
+					}
+					m_cplex.addLe(constraint, 1.0, "h_one_price_a_" + a + "_q_" + q);
+				}
+			}
+		}
+		
+		// Do not allocate more than we will have
+		for (int s = 0; s < numScenario; s++)
+		for (int a = 0; a < numAuction; a++) {
+			IloLinearNumExpr allocNum = m_cplex.linearNumExpr();
+			IloLinearNumExpr ownNum   = m_cplex.linearNumExpr();
+			
+			for (int c = 0; c < numClient; c++) {
+				for (int p = 0; p < numPackage; p++) {
+					if(constPackageContainGood[p][a]) {
+						allocNum.addTerm(varClientPackageInScenario[c][p][s], 1);
+					}
+				}
+			}
+			
+			ownNum.setConstant(constOwn[a]);
+			
+			switch (Constants.auctionType(a)) {
+			case Constants.TYPE_FLIGHT: 
+				ownNum.addTerm(varCurrBuy[a], 1.0);
+				ownNum.addTerm(varNextBuy[a][s], 1.0);
+				m_cplex.addLe(allocNum, ownNum, "allocF_a_" + a + "_s_" + s);
+				break;
+				
+			case Constants.TYPE_HOTEL:
+				if (constHotelClosed[a-8]) {
+					m_cplex.addLe(allocNum, ownNum, "allocClosedH_a" + a + "_s_" + s);
+					break;
+				}
+				
+				int s_index = (a == constHotelClosing) ? 0 : s;
+				
+				for (int q = 0; q < Constants.MAX_QUANTITY; q++) {
+					for (int p = 0; p < constHotelOrdered[a-8].length; p++) {
+						float simPrice = constHotel[a-8][s];
+						float bidPrice = constHotelOrdered[a-8][p];
+						if (bidPrice >= simPrice) {
+							ownNum.addTerm(varHotelForQth[a-8][q][s_index][p], 1.0);
+						}
+					}
+				}
+				
+				m_cplex.addLe(allocNum, ownNum, "allocOpenH_a_" + a + "_s_" + s);
+				break;
+				
+			case Constants.TYPE_EVENT:
+				IloLinearNumExpr sellNum = m_cplex.linearNumExpr();
+				sellNum.addTerm(varCurrBuy [a],  1.0);
+				sellNum.addTerm(varNextBuy [a][s], 1.0);
+				m_cplex.addLe(sellNum, Math.max(0, constOwn[a]), "sell allocE_a_" + a + "_s_" + s);
+				
+				ownNum.addTerm(varCurrBuy [a],  1.0);
+				ownNum.addTerm(varNextBuy [a][s], 1.0);
+				ownNum.addTerm(varCurrSell[a], -1.0);
+				ownNum.addTerm(varNextSell[a][s], -1.0);
+				m_cplex.addLe(allocNum, ownNum, "allocE_a_" + a + "_s_" + s);
+				break;
+			}
+		}
+		
+		// If ownNum < 0, this agent must make it positive.
+		for (int a = 16; a < numAuction; a++) {
+			if (constOwn[a] >= 0) continue;
+			for (int s = 0; s < numScenario; s++) {
+				IloLinearNumExpr buyNum  = m_cplex.linearNumExpr();
+				
+				buyNum.addTerm(varCurrBuy[a],  1.0);
+				buyNum.addTerm(varNextBuy[a][s], 1.0);
+				buyNum.addTerm(varCurrSell[a], -1.0);
+				buyNum.addTerm(varNextSell[a][s], -1.0);
+				
+				m_cplex.addGe(buyNum, - constOwn[a], "eventProhibitBoth_a_" + a + "_s_" + s);
+			}
+		}
+		
+		// hqw
+		// if hwqNum != 0, hwqNum <= bidNum
+		// else, we don't have to care about this.
+		/** we don't have to worry about hqw in unknown sequential
+		for (int a = 8; a < 16; a++) {
+			if (constHotelClosed[a-8]) continue;
+			if (constHQW[a-8] <= 0) continue;
+			
+			IloLinearNumExpr bidNum = m_cplex.linearNumExpr();
+			for (int q = 0; q < Constants.MAX_QUANTITY; q++) {
+				for (int i = 0; i < constHotelOrdered[a-8].length; i++) {
+					bidNum.addTerm(varHotelForQth[a-8][q][i], 1.0);
+				}
+			}
+			
+			m_cplex.addLe(constHQW[a-8], bidNum, "mustBidOnAtLeastHQW_" + a);
+		}
+		*/
+	} catch (Exception e) { e.printStackTrace(); } }
+
+	protected void calculate () { try {
+		float totalProb = 0;
+		for (int s = 0; s < numScenario; s++) totalProb += constProb[s];
+		objective.setConstant(constAccount * totalProb); 
+		
+		super.calculate();
+		Misc.println(getClass().getSimpleName() + ".calculate " +
+				": expected score " + (int) (m_cplex.getObjValue()/totalProb));
+	} catch (Exception e) { e.printStackTrace(); } }
+	
+	protected Completion writeOutput () { try {
+		Allocation allocation = new Allocation();
+		BidPolicy  buyPolicy  = new BidPolicy();
+		BidPolicy  sellPolicy = new BidPolicy();
+		
+		for (int c = 0; c < numClient; c++) {
+			for (int p = 0; p < numPackage; p++) {
+				if (Math.round(m_cplex.getValue(varClientPackageInScenario[c][p][0])) == 1) {
+					TravelPackage tp = new TravelPackage(m_packages[p]);
+					tp.calculateUtility(m_repository.getClientPrefs()[c], true, true, true);
+					allocation.setTravelPackage(c, tp);
+				}
+			}
+		}
+		
+		for (int a = 0; a < numAuction; a++) {
+			switch (Constants.auctionType(a)) {
+			case Constants.TYPE_FLIGHT:
+				for (int i = 0; i < Math.round(m_cplex.getValue(varCurrBuy[a])); i++ ) {
+					buyPolicy.addPrice(a, 1000);
+				}
+				
+				break;
+				
+			case Constants.TYPE_HOTEL:
+				if (a != constHotelClosing) break;
+				
+				if (varHotelForQth[a-8].length == 0) break; // at the end of the game
+				if (varHotelForQth[a-8][0].length == 0) break; // at the end of the game
+				if (varHotelForQth[a-8][0][0] == null) break; // at the end of the game
+				for (int q = 0; q < Constants.MAX_QUANTITY; q++) {
+					for (int i = 0; i < varHotelForQth[a-8][q][0].length; i++) {
+						if (Math.round(m_cplex.getValue(varHotelForQth[a-8][q][0][i])) == 1)  {
+							float bidPrice = constHotelOrdered[a-8][i];
+							buyPolicy.addPrice(a, bidPrice);
+						}
+					}
+				}
+				
+				break;
+				
+			case Constants.TYPE_EVENT:
+				for (int i = 0; i < Math.round(m_cplex.getValue(varCurrBuy[a])); i++ ) {
+					buyPolicy.addPrice(a, constCurrBuy[a]);
+				}
+				
+				for (int i = 0; i < Math.round(m_cplex.getValue(varCurrSell[a])); i++ ) {
+					sellPolicy.addPrice(a, constCurrSell[a]);
+				}
+				
+				break;
+			}
+		}				
+		
+		buyPolicy.sort();
+		sellPolicy.sort();
+		
+		Completion ret = new Completion(allocation, buyPolicy, sellPolicy);
+		Misc.println(getClass().getSimpleName() + ".writeOutput : " + ret);
+		return ret;
+	} catch (Exception e) { e.printStackTrace(); return null; } }
+}
+

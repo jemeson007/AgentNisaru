@@ -1,0 +1,45 @@
+% simulation setting
+
+% GAME SETTING
+% game_number = integer (default is 1)
+% entertainment = none | exist : "exist" is not built yet.
+% simulation_type = decision_theoretic | game_theoretic
+% auction_type = unknown_sequential | simultaneous | known_sequential : known_sequential is not implemented.
+% flight_price = integer
+% hotel_bonus_interval = integer (default is 100)
+% utility = integer (default is 1000)
+% agent_number_binomial = false | true : if this is true, the number of agents is B(agent_number, 0.5).
+% agent_number = integer (default is 8)
+% random_agent = false | true : if this is true, the agents are sampled randomly among the given algorithm specifications with replacement.
+% closing_type = ce | normal : N(mean + shift, sigma), resampled if negative. "normal" only works auction_type = simultaneous.
+% normal_closing_sigma       = double : default is 0.5, standard deviation
+% normal_prediction_sigma    = double : default is normal_prediction_sigma
+% normal_closing_shift       = double : default is 0
+% normal_prediction_shift    = double : default is normal_prediction_shift
+% normal_closing_interval    = double : default is 1, obsolete
+% normal_prediction_interval = double : default is normal_prediction_interval, obsolete
+% normal_mean = double, double, double, double, double, double, double, double : default is 10, 50, 50, 10, 40, 110, 110, 40
+
+% agenti = string : agent specification for ith agent
+agent1 = SAAX.sim
+agent2 = SAAB.sim
+agent3 = TMU.sim
+agent4 = TMUX.sim
+agent5 = AMU.sim
+agent6 = SMU.sim
+agent7 = BE.sim
+agent8 = BEX.sim
+
+% REPOSITORY OPTIONS
+% flight_bidding = no_modification | best_time | last_time | attac | first_time : "first_time", "last_time" only works flight_prediction = constant.
+% flight_prediction = expected | sampled | constant
+% entertainment_prediction = constant | history
+
+% COMPETITIVE EQUILIBRIUM PREDICTION OPTIONS
+% ce_update = simultaneousAA | tatonnement
+% ce_perspective = expected | sampled | distribution | Walverine
+% ce_max_iteration = integer
+% ce_alpha = double
+%
+% Walverine ignores price-perspective, price-alpha and price-maxIteration, uses an expected flight.
+% tatonnement is deprecated with online game type for running time reason.

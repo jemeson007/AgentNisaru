@@ -1,0 +1,26 @@
+BidEvaluator
+Algorithm.
+MUBidder.
+HotelPredictor.
+MUOldBidder.
+BidValidator
+AttacAlgorithm
+GoodsChooser
+AverageMU
+StraightMU
+OfflineAgent.getFlightBids
+Roxybot2000.
+	SAACompleter
+	SAA
+SimulatedAgent.
+RealAgent.
+GameEngineSimultaneous.tic
+Completer.calculate
+AgentFactory
+GameEngine
+OfflineAgent
+Repository
+HotelPredictorDeterministic.addExtremeScenarios
+	Priceline
+Algorithm.evaluate
+GameEngineSimultaneous.tic

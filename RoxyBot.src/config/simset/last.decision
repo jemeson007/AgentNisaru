@@ -1,0 +1,23 @@
+% simulation setting
+
+% GAME SETTING
+game_number = 1000
+entertainment = none
+simulation_type = decision_theoretic
+auction_type = unknown_sequential
+
+flight_prediction = constant
+flight_price = 325
+flight_bidding = last_time
+
+closing_type = ce
+ce_alpha = 1
+
+agent1 = SAAX.sim
+agent2 = SAAB.sim
+agent3 = TMU.sim
+agent4 = TMUX.sim
+agent5 = BE.sim
+agent6 = BEX.sim
+agent7 = SMU.sim
+agent8 = AMU.sim

@@ -1,0 +1,52 @@
+% agent setting
+
+% GAME SETTING
+% game_type = real | simulation
+% entertainment = none | exist
+
+% REPOSITORY OPTIONS
+% flight_bidding = no_modification | best_time | last_time | attac
+% flight_prediction = expected | sampled | constant
+% entertainment_prediction = constant | history
+
+% ALGORITHM SPECIFICATION
+% algorithm = SAA | TMU | BE | AMU | SMU
+% algorithm_numScenario   = integer : we recommand 50 | 50 |  1 | 15 | 50	
+% algorithm_numPolicy     = integer : we recommand  1 |  1 | 25 |  1 |  1
+% algorithm_numEvaluation = integer : we recommand  1 |  1 | 15 |  1 |  1
+
+% ALGORITHM SPECIFIC SETTING
+% algorithm_saa_extreme_min = false | true : true is deprecated. 
+% algorithm_saa_extreme_max = false | true : true is deprecated.
+% algorithm_saa_type = bottom | top | top_util
+% algorithm_mu_useOldMU = true | false
+% algorithm_tmu_extreme = true | false
+% algorithm_be_extreme = true | false
+%
+% 'extremeMin' adds current ask price + 0.1f with probability 1 for each
+% open hotels. For other hotels, we use the average of already predicted.
+% 'extremeMax' adds 2 more scenarios for the first two minutes per open hotels,
+% and 4 more scenarios for the other minutes per open hotels. For more specific
+% information, please look at HotelPredictor.java.
+
+% COMPETITIVE EQUILIBRIUM PREDICTION OPTIONS
+% ce_update = simultaneousAA | tatonnement
+% ce_perspective = expected | sampled | distribution | Walverine
+% ce_max_iteration = integer
+% ce_alpha = double
+%
+% Walverine ignores price-perspective, price-alpha and price-maxIteration, uses an expected flight.
+% tatonnement is deprecated with online game type for running time reason.
+
+% HIDDEN VALUE
+%% closing_type = ce | normal : N(mean + shift, sigma), resampled if negative.
+%% normal_closing_sigma       = double : default is 0.5, standard deviation
+%% normal_prediction_sigma    = double : default is normal_closing_sigma
+%% normal_closing_shift       = double : default is 0
+%% normal_prediction_shift    = double : default is normal_closing_shift
+%% normal_closing_interval    = double : default is 1, obsolete
+%% normal_prediction_interval = double : default is normal_closing_interval, obsolete
+%% normal_mean = double, double, double, double, double, double, double, double : default is 10, 50, 50, 10, 40, 110, 110, 40
+%% agent_number = integer (default is 8)
+%% random_agent = false | true
+%% flight_price = integer : if flight_prediction is constant, this option should be specified.

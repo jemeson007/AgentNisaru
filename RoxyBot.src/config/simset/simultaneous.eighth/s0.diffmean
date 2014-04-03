@@ -1,0 +1,21 @@
+% simulation setting
+
+agent_number = 8
+game_number = 1000
+entertainment = none
+simulation_type = decision_theoretic
+auction_type = simultaneous
+flight_price = 325
+flight_prediction = constant
+closing_type = normal
+normal_closing_sigma = 0
+normal_mean = 150, 150, 150, 150, 250, 250, 250, 250
+
+agent1 = SAAT.sim
+agent2 = SAAB.sim
+agent3 = TMU.sim
+agent4 = TMUX.sim
+agent5 = BE.sim
+agent6 = BEX.sim
+agent7 = AMU.sim
+agent8 = SMU.sim

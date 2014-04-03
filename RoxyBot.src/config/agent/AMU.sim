@@ -1,0 +1,8 @@
+% agent setting
+
+% GAME SETTING
+game_type = simulation
+entertainment = none
+
+% ALGORITHM SPECIFICATION
+algorithm = AMU

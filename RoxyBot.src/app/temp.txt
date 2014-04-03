@@ -1,0 +1,2 @@
+analyze.pl -f ../result/ce.32.zeroflight.game.cslab4b.out ../result/ce.32.zeroflight.game.cslab4c.out ../result/ce.32.zeroflight.game.cslab4d.out ../result/ce.32.zeroflight.game.cslab4e.out ../result/ce.32.zeroflight.game.cslab4f.out ../result/ce.32.zeroflight.game.cslab4g.out ../result/ce.32.zeroflight.game.cslab4h.out -s -m
+analyze.pl -f ../result/ce.8.zeroflight.game.cslab3f.out ../result/ce.8.zeroflight.game.cslab3g.out ../result/ce.8.zeroflight.game.cslab3h.out -s -m

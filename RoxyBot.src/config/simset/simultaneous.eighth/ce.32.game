@@ -1,0 +1,21 @@
+% simulation setting
+
+game_number = 500
+agent_number = 32
+agent_number_binomial = true
+random_agent = true
+entertainment = none
+simulation_type = game_theoretic
+auction_type = simultaneous
+flight_prediction = constant
+flight_price = 325
+closing_type = ce
+
+agent1 = SAAT.sim
+agent2 = SAAB.sim
+agent3 = TMU.sim
+agent4 = TMUX.sim
+agent5 = BE.sim
+agent6 = BEX.sim
+agent7 = AMU.sim
+agent8 = SMU.sim

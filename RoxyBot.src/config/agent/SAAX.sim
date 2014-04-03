@@ -1,0 +1,11 @@
+% agent setting
+
+% GAME SETTING
+game_type = simulation
+entertainment = none
+
+% ALGORITHM SPECIFICATION
+algorithm = SAA
+algorithm_saa_type = bottom
+algorithm_saa_extreme_min = true
+algorithm_saa_extreme_max = true

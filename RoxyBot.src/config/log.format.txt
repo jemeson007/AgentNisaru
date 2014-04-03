@@ -1,0 +1,41 @@
+begin
+	#,bgn,game
+
+agent
+	#,agt,agent,name
+
+client
+	#,cln,agent,...
+
+transaction
+	#,trs,time,buyer,seller,auction,quantity,price
+
+bid
+	#,bid,time,agent,auction,quantity,price
+
+hqw
+	#,hqw,time,auction,...
+
+runtime
+	#,run,time,agent,runtime(millisecond)
+
+flight quote
+	#,flt,time,...
+
+hotel quote
+	#,htl,time,auction,size,price
+
+allocation
+	#,alc,agent,...
+
+collection
+	#,cll,agent,...
+	
+score	
+	#,scr,agent,score,utility,cost,penalty,hotelbonus,nullpackage
+
+hotel closing price
+	#,cls,auction,price
+	
+end
+	#,end,game,length

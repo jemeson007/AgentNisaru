@@ -1,0 +1,12 @@
+#!/usr/bin/perl -w
+
+open(LOG, "../config/host.usable");
+while($line = <LOG>) {
+	$host = substr($line, 0, length($line)-1);
+	print $host."\n";
+	$res = system("ssh $host -o ConnectTimeout=1 -x 'exit;';");
+	if($res!=0){
+		print "% $host is not working\n";
+	}	
+}
+close(LOG);
